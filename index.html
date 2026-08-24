@@ -3,28 +3,100 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FRAME · Session Intelligence — Testfälle</title>
+<title>FRAME · Session Intelligence — Pilot</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="page-header">
     <p class="eyebrow">FRAME · Session Intelligence</p>
-    <h1>Testfälle für Gerrit Terdenge</h1>
+    <h1>Nach-Diktierung verdichten</h1>
     <p class="intro">
-      Drei anonymisierte Beispiele. Jeder Fall zeigt den Weg von der freien Nach-Diktierung
-      über eine Lemmiscus-Kurznotiz bis zum Next Session Brief für den Folgetermin.
-      Unklar transkribierte Begriffe wurden nicht interpretiert, sondern als
-      <strong>UNKLAR</strong> markiert. Die Bewertung pro Fall bleibt ausschließlich lokal
-      in diesem Browser gespeichert — es gibt keinen Server, keine Datenbank, keine Übertragung.
+      Nach jeder Behandlung: kurz einsprechen, prüfen, manuell nach Lemmiscus übernehmen.
+      Lemmiscus bleibt das führende System — dieses Tool ersetzt es nicht, es nimmt nur
+      das Schreiben ab.
     </p>
   </header>
 
-  <main id="cases"></main>
+  <main>
+    <section class="pilot-section" aria-labelledby="pilot-heading">
+      <h2 id="pilot-heading">Neue Nach-Diktierung</h2>
+
+      <div class="pilot-notice">
+        <strong>Pilotphase</strong> — ausschließlich vollständig anonymisierte Angaben
+        verwenden. Keine Namen oder identifizierenden Patientendaten einsprechen.
+      </div>
+
+      <p class="pilot-status-message" id="pilot-message" role="status" aria-live="polite"></p>
+
+      <div class="recorder-state" id="recorder-idle">
+        <button type="button" id="btn-start" class="btn btn-primary">Mikrofon starten</button>
+        <button type="button" id="btn-manual" class="btn btn-secondary">Transkript manuell eingeben</button>
+      </div>
+
+      <div class="recorder-state recording-active" id="recorder-recording" hidden>
+        <div class="timer" id="timer">00:00</div>
+        <p class="interim-transcript" id="interim-transcript" aria-live="polite"></p>
+        <div class="recorder-actions">
+          <button type="button" id="btn-stop" class="btn btn-primary">Stop</button>
+          <button type="button" id="btn-cancel" class="btn btn-secondary">Abbrechen</button>
+        </div>
+      </div>
+
+      <div class="recorder-state" id="transcript-review" hidden>
+        <h3>Transkript</h3>
+        <textarea id="transcript-text" rows="6" aria-label="Transkript (editierbar)"></textarea>
+        <div class="recorder-actions">
+          <button type="button" id="btn-compress" class="btn btn-primary">Verdichten</button>
+          <button type="button" id="btn-reset-1" class="btn btn-secondary">Neue Session</button>
+        </div>
+      </div>
+
+      <div class="recorder-state outputs" id="outputs" hidden>
+        <div class="output-box">
+          <div class="output-header">
+            <h3>Lemmiscus-Kurznotiz</h3>
+            <button type="button" class="btn-copy" data-target="output-kurznotiz">Kopieren</button>
+          </div>
+          <textarea id="output-kurznotiz" rows="4" aria-label="Lemmiscus-Kurznotiz (editierbar)"></textarea>
+        </div>
+
+        <div class="output-box">
+          <div class="output-header">
+            <h3>Next Session Brief</h3>
+            <button type="button" class="btn-copy" data-target="output-brief">Kopieren</button>
+          </div>
+          <textarea id="output-brief" rows="6" aria-label="Next Session Brief (editierbar)"></textarea>
+        </div>
+
+        <div class="unklar-box" id="unklar-box" hidden>
+          <h3>Bitte prüfen / unklar</h3>
+          <ul id="unklar-list"></ul>
+        </div>
+
+        <div class="recorder-actions">
+          <button type="button" id="btn-reset-2" class="btn btn-secondary">Neue Session</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="examples-section" aria-labelledby="examples-heading">
+      <h2 id="examples-heading">Beispiele aus deinen bisherigen Angaben</h2>
+      <p class="intro">
+        Drei anonymisierte Beispiele aus den bereitgestellten Angaben. Sie dienen nur zur
+        Orientierung und Output-Validierung, nicht als Live-Funktion — die Bewertung pro
+        Fall bleibt ausschließlich lokal in diesem Browser gespeichert.
+      </p>
+      <div id="cases"></div>
+    </section>
+  </main>
 
   <footer class="page-footer">
-    <p>Statischer Test ohne Backend, ohne API, ohne LLM-Anbindung. Fachliche Entscheidung bleibt bei Gerrit.</p>
+    <p>Kein Backend, keine API, kein LLM, keine Lemmiscus-Integration, keine Datenbank, kein Tracking. Fachliche Entscheidung bleibt bei Gerrit.</p>
   </footer>
 
+  <script src="recorder.js"></script>
+  <script src="compress.js"></script>
+  <script src="pilot.js"></script>
   <script src="cases.js"></script>
   <script src="app.js"></script>
 </body>

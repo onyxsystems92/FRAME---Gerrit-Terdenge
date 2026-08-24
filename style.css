@@ -16,6 +16,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -50,12 +54,168 @@ body {
   max-width: 680px;
 }
 
-main#cases {
+main {
   max-width: 1080px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
+  gap: 48px;
+}
+
+#cases {
+  display: flex;
+  flex-direction: column;
   gap: 28px;
+}
+
+.pilot-section,
+.examples-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pilot-section h2,
+.examples-section h2 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.examples-section .intro {
+  margin: 0;
+  max-width: 100%;
+}
+
+.pilot-notice {
+  background: var(--unklar-bg);
+  color: var(--unklar-text);
+  border: 1px solid #e8c99a;
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  font-size: 14px;
+}
+
+.pilot-status-message {
+  margin: 0;
+  font-size: 13px;
+  min-height: 0;
+}
+
+.pilot-status-message.warning {
+  color: #a03d2f;
+  background: #fbe4e0;
+  border: 1px solid #f0bcb2;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.recorder-state {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.recorder-state h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.btn {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 20px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--toggle-active-bg);
+  color: var(--toggle-active-text);
+}
+
+.btn-secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.recorder-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.timer {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.interim-transcript {
+  color: var(--text-muted);
+  font-size: 14px;
+  min-height: 20px;
+  margin: 0;
+}
+
+textarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  resize: vertical;
+}
+
+.outputs {
+  gap: 20px;
+}
+
+.output-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.output-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.btn-copy {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.unklar-box {
+  background: var(--unklar-bg);
+  border: 1px solid #e8c99a;
+  border-radius: 8px;
+  padding: 14px 18px;
+}
+
+.unklar-box h3 {
+  margin: 0 0 8px;
+  color: var(--unklar-text);
+}
+
+.unklar-box ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--unklar-text);
 }
 
 .case-card {
