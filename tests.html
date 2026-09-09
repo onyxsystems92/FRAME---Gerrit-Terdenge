@@ -17,7 +17,7 @@
 <body>
 <h1>FRAME · Compress Engine — Tests</h1>
 <div id="output"></div>
-<script src="compress.js?v=4"></script>
+<script src="compress.js?v=5"></script>
 <script>
 (async function () {
   const out = document.getElementById("output");
@@ -264,6 +264,25 @@
       r.unklarItems.includes("Chiro Elves"), "UNKLAR: " + JSON.stringify(r.unklarItems));
     assert("Array contract: known array item not flagged UNKLAR",
       !r.unklarItems.includes("Vibro PPT"), "UNKLAR: " + JSON.stringify(r.unklarItems));
+  })();
+
+  // --- 18b. LLM verb-form therapie items not falsely flagged UNKLAR ---
+  // Regression test: live production proof (2026-09-09) showed the real
+  // OpenAI structuring path returns therapy items with natural verb forms
+  // ("mobilisiert", "Faszientechnik gemacht", "Tape angelegt") per its own
+  // no-invention/keep-original-wording rule -- these were being flagged
+  // UNKLAR even though the underlying techniques are known vocabulary.
+  (function () {
+    const r = classifyTherapyItems(["mobilisiert", "Faszientechnik gemacht", "Tape angelegt"]);
+    assert("LLM verb forms: 'mobilisiert' recognized (Mobilisation verb form)",
+      !r.unklar.includes("mobilisiert"), "UNKLAR: " + JSON.stringify(r.unklar));
+    assert("LLM verb forms: 'Faszientechnik gemacht' recognized despite trailing verb",
+      !r.unklar.includes("Faszientechnik gemacht"), "UNKLAR: " + JSON.stringify(r.unklar));
+    assert("LLM verb forms: 'Tape angelegt' recognized despite trailing verb",
+      !r.unklar.includes("Tape angelegt"), "UNKLAR: " + JSON.stringify(r.unklar));
+    assert("LLM verb forms: genuinely unknown item with a verb suffix is still UNKLAR",
+      classifyTherapyItems(["Skriben durchgeführt"]).unklar.includes("Skriben durchgeführt"),
+      "Expected 'Skriben durchgeführt' to still be flagged UNKLAR");
   })();
 
   // --- 19. Grounding / no-invention: buildOutput never adds text beyond input ---

@@ -13,7 +13,7 @@
 
 const KNOWN_TECHNIQUE_PHRASES = [
   "Vibro PPT", "Neuralmassage", "Schiebetechnik", "Schiebe", "Release",
-  "FDM Jones", "FDM", "Jones", "Mobilisation", "Chirotherapie", "Chiro",
+  "FDM Jones", "FDM", "Jones", "Mobilisation", "Mobilisiert", "Chirotherapie", "Chiro",
   "Massage", "Manuelle Therapie", "Dehnung", "Dehnübung",
   "Triggerpunktbehandlung", "Triggerpunkt", "Wärme", "Kälte", "Taping",
   "Tape", "Ultraschall", "Elektrotherapie", "Lymphdrainage", "Osteopathie",
@@ -29,10 +29,18 @@ const KNOWN_WORDS = new Set(
   KNOWN_TECHNIQUE_PHRASES.flatMap(p => p.toLowerCase().split(/\s+/))
 );
 
+// Includes German past-participle "performed X" fillers (gemacht,
+// durchgeführt, angewendet, angelegt, eingesetzt, behandelt) — the LLM
+// path keeps the practitioner's original verb form per its no-invention
+// rule (e.g. "Tape angelegt", "Faszientechnik gemacht"), so these must not
+// cause an otherwise-recognized technique to be flagged UNKLAR just for
+// carrying its natural verb alongside it.
 const CONNECTOR_WORDS = new Set([
   "mit", "ohne", "und", "sowie", "dann", "noch", "auch", "bisschen",
   "etwas", "sehr", "komplett", "kompl", "links", "li", "rechts", "re",
-  "beidseits", "beidseitig", "der", "die", "das", "den", "dem", "am", "im"
+  "beidseits", "beidseitig", "der", "die", "das", "den", "dem", "am", "im",
+  "gemacht", "durchgeführt", "durchgefuehrt", "angewendet", "angelegt",
+  "eingesetzt", "behandelt"
 ]);
 
 const SPINE_LEVEL_RE = /^[a-zA-Z]{1,3}\d{1,2}(\/[a-zA-Z]{0,3}\d{1,2})?$/;
