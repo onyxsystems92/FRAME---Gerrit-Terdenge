@@ -97,11 +97,16 @@ function splitLabel(text, labelPattern) {
   return { index: match.index, length: match[0].length };
 }
 
-function classifyTherapyItems(therapieText) {
-  const items = therapieText
-    .split(/,|;| und /i)
-    .map(s => s.trim().replace(/[.!?]+$/, "").trim())
-    .filter(Boolean);
+function classifyTherapyItems(therapieInput) {
+  // Accepts either a raw string (deterministic path — split into items here)
+  // or an array of already-segmented items (LLM path — each item is used
+  // as-is, since the model already separated individual techniques).
+  const items = Array.isArray(therapieInput)
+    ? therapieInput.map(s => String(s).trim().replace(/[.!?]+$/, "").trim()).filter(Boolean)
+    : therapieInput
+        .split(/,|;| und /i)
+        .map(s => s.trim().replace(/[.!?]+$/, "").trim())
+        .filter(Boolean);
 
   const recognized = [];
   const unklar = [];
@@ -208,22 +213,37 @@ function formatItemsForDisplay(recognized, unklar, items) {
     .join(", ");
 }
 
+// Narrative fields (befund/verlauf/fokus) may arrive as a single string
+// (deterministic path) or an array of fragments (LLM path, already split
+// by meaning). Normalize to display text without inventing punctuation
+// that implies a relationship the source didn't state.
+function joinText(value) {
+  if (Array.isArray(value)) {
+    return value.map(s => String(s).trim()).filter(Boolean).join("; ");
+  }
+  return value || "";
+}
+
 function buildOutput(befund, therapie, verlauf, fokus) {
+  const befundText = joinText(befund);
+  const verlaufText = joinText(verlauf);
+  const fokusText = joinText(fokus);
+
   const { recognized, unklar, items } = classifyTherapyItems(therapie);
   const therapieDisplay = formatItemsForDisplay(recognized, unklar, items);
 
   const noteLines = [];
-  if (befund) noteLines.push(`Befund: ${abbreviate(befund)}`);
+  if (befundText) noteLines.push(`Befund: ${abbreviate(befundText)}`);
   if (items.length > 0) noteLines.push(`Therapie: ${abbreviate(therapieDisplay)}`);
-  if (verlauf) noteLines.push(`Verlauf: ${abbreviate(verlauf)}`);
-  if (fokus) noteLines.push(`Fokus: ${abbreviate(fokus)}`);
+  if (verlaufText) noteLines.push(`Verlauf: ${abbreviate(verlaufText)}`);
+  if (fokusText) noteLines.push(`Fokus: ${abbreviate(fokusText)}`);
   const note = noteLines.join("\n");
 
   const briefLines = [];
-  if (befund) briefLines.push(`Aktuell: ${abbreviate(befund)}`);
+  if (befundText) briefLines.push(`Aktuell: ${abbreviate(befundText)}`);
   if (items.length > 0) briefLines.push(`Letzte Behandlung: ${abbreviate(therapieDisplay)}`);
-  if (verlauf) briefLines.push(`Verlauf: ${abbreviate(verlauf)}`);
-  if (fokus) briefLines.push(`Nächster Fokus: ${abbreviate(fokus)}`);
+  if (verlaufText) briefLines.push(`Verlauf: ${abbreviate(verlaufText)}`);
+  if (fokusText) briefLines.push(`Nächster Fokus: ${abbreviate(fokusText)}`);
   const brief = briefLines.join("\n");
 
   return { note, brief, unklarItems: unklar };
@@ -234,7 +254,17 @@ function compressTranscript(rawText) {
   return buildOutput(befund, therapie, verlauf, fokus);
 }
 
-// --- LLM structuring path (optional, requires Worker) ---
+// A transcript counts as "explicitly labeled" only if it carries both a
+// Befund/Beschwerden label AND a Therapie label — the exact condition
+// parseTranscript itself uses to take its labeled fast path. Only labeled
+// input gets an explicit, clearly-marked deterministic fallback; unlabeled
+// natural dictation fails honest instead of rendering a misleading
+// "structured" note when the AI path is unavailable (see README/CLAUDE.md).
+function hasExplicitLabels(rawText) {
+  return /\b(Befund|Beschwerden)\s*:/i.test(rawText) && /\bTherapie\s*:/i.test(rawText);
+}
+
+// --- LLM structuring path (bounded, via Cloudflare Worker → n8n → OpenAI) ---
 
 var STRUCTURE_API_URL = "https://frame-gerrit-structure.franklyn-busse.workers.dev";
 
@@ -251,15 +281,32 @@ async function structureWithLLM(rawText) {
   return data;
 }
 
+/**
+ * Returns one of:
+ *  - { status: "ai", note, brief, unklarItems }
+ *      Structuring succeeded via the bounded LLM path.
+ *  - { status: "fallback", note, brief, unklarItems }
+ *      AI path unavailable, but input carried explicit Befund:/Therapie:
+ *      labels — the deterministic parser handles this reliably, rendered
+ *      with a clear "limited fallback" marker by the caller.
+ *  - { status: "unavailable" }
+ *      AI path unavailable AND input was unlabeled natural dictation.
+ *      The deterministic parser is known to misclassify this case (see
+ *      Natural Dictation Proof), so no note is rendered — fail honest
+ *      rather than show a clinically misleading structure.
+ */
 async function compressTranscriptAsync(rawText) {
   try {
     const { befund, therapie, verlauf, fokus } = await structureWithLLM(rawText);
     const result = buildOutput(befund, therapie, verlauf, fokus);
-    result.source = "llm";
+    result.status = "ai";
     return result;
   } catch {
-    const result = compressTranscript(rawText);
-    result.source = "local";
-    return result;
+    if (hasExplicitLabels(rawText)) {
+      const result = compressTranscript(rawText);
+      result.status = "fallback";
+      return result;
+    }
+    return { status: "unavailable" };
   }
 }

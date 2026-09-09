@@ -34,7 +34,8 @@
     btnReset2: document.getElementById("btn-reset-2"),
     feedback: document.getElementById("pilot-feedback"),
     feedbackSaved: document.getElementById("pilot-feedback-saved"),
-    fallbackNotice: document.getElementById("fallback-notice")
+    fallbackNotice: document.getElementById("fallback-notice"),
+    unavailableNotice: document.getElementById("unavailable-notice")
   };
 
   let currentFeedback = {};
@@ -86,6 +87,8 @@
     els.brief.value = "";
     els.unklarList.innerHTML = "";
     els.unklarBox.hidden = true;
+    if (els.fallbackNotice) els.fallbackNotice.hidden = true;
+    if (els.unavailableNotice) els.unavailableNotice.hidden = true;
     els.timer.textContent = "00:00";
     els.interim.textContent = "";
     clearFeedbackToggles();
@@ -152,7 +155,7 @@
   els.btnStop.addEventListener("click", () => recorder.stop());
   els.btnCancel.addEventListener("click", resetAll);
 
-  els.btnCompress.addEventListener("click", async () => {
+  async function runCompress() {
     const text = els.transcriptText.value.trim();
     if (!text) {
       showMessage("Bitte zuerst ein Transkript eingeben oder aufnehmen.", "warning");
@@ -168,12 +171,23 @@
     try {
       result = await compressTranscriptAsync(text);
     } catch {
-      result = compressTranscript(text);
-      result.source = "local";
+      result = { status: "unavailable" };
     }
 
     els.btnCompress.textContent = originalLabel;
     els.btnCompress.disabled = false;
+
+    if (result.status === "unavailable") {
+      // Fail honest: no structured note rendered for unlabeled natural
+      // dictation when the AI path is down — the deterministic parser is
+      // known to misclassify this case (Natural Dictation Proof). Keep the
+      // transcript visible for manual review instead.
+      showOnly(els.review);
+      if (els.unavailableNotice) els.unavailableNotice.hidden = false;
+      return;
+    }
+
+    if (els.unavailableNotice) els.unavailableNotice.hidden = true;
 
     els.note.value = result.note;
     els.brief.value = result.brief;
@@ -191,12 +205,14 @@
     }
 
     if (els.fallbackNotice) {
-      els.fallbackNotice.hidden = result.source !== "local" || !STRUCTURE_API_URL;
+      els.fallbackNotice.hidden = result.status !== "fallback";
     }
 
     clearFeedbackToggles();
     showOnly(els.outputs);
-  });
+  }
+
+  els.btnCompress.addEventListener("click", runCompress);
 
   document.querySelectorAll(".btn-copy").forEach(btn => {
     btn.addEventListener("click", async () => {

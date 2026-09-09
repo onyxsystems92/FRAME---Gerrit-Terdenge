@@ -17,9 +17,9 @@
 <body>
 <h1>FRAME · Compress Engine — Tests</h1>
 <div id="output"></div>
-<script src="compress.js?v=3"></script>
+<script src="compress.js?v=4"></script>
 <script>
-(function () {
+(async function () {
   const out = document.getElementById("output");
   let passed = 0, failed = 0;
 
@@ -213,6 +213,143 @@
     assert("compressTranscriptAsync: STRUCTURE_API_URL is set",
       typeof STRUCTURE_API_URL === "string" && STRUCTURE_API_URL.length > 0,
       "STRUCTURE_API_URL: " + STRUCTURE_API_URL);
+  })();
+
+  // --- 15. Array output contract (LLM path shape) ---
+  (function () {
+    const r = buildOutput(
+      ["Knie rechts tut weh", "beim Fußball verletzt am Wochenende"],
+      ["Mobilisation", "Faszientechnik", "Tape"],
+      ["Reagiert deutlich positiv auf die Behandlung"],
+      ["Stabilisationsübungen beim nächsten Mal"]
+    );
+    assert("Array contract: befund fragments joined without inventing connectors",
+      r.note.includes("Knie rechts tut weh; beim Fußball verletzt am Wochenende"),
+      "Got: " + r.note);
+    assert("Array contract: therapie items used directly (no re-splitting)",
+      r.note.includes("Mobilisation") && r.note.includes("Faszientechnik") && r.note.includes("Tape"),
+      "Got: " + r.note);
+    assert("Array contract: all 4 sections present",
+      r.note.includes("Befund:") && r.note.includes("Therapie:") &&
+      r.note.includes("Verlauf:") && r.note.includes("Fokus:"),
+      "Got: " + r.note);
+    assert("Array contract: no UNKLAR for recognized array items",
+      r.unklarItems.length === 0, "UNKLAR: " + JSON.stringify(r.unklarItems));
+  })();
+
+  // --- 16. Array output contract: empty arrays produce empty sections ---
+  (function () {
+    const r = buildOutput(["Schmerzen LWS"], ["Massage"], [], []);
+    assert("Array contract: empty verlauf array -> no Verlauf section",
+      !r.note.includes("Verlauf:"), "Got: " + r.note);
+    assert("Array contract: empty fokus array -> no Fokus section",
+      !r.note.includes("Fokus:"), "Got: " + r.note);
+  })();
+
+  // --- 17. Array contract: single therapy item with embedded comma stays one item ---
+  (function () {
+    // Unlike the deterministic string path (which splits on commas), an
+    // array item from the LLM is already a segmented unit and must NOT be
+    // re-split — this is exactly the ambiguity the array contract removes.
+    const r = classifyTherapyItems(["Chiro Elves mit Release"]);
+    assert("Array contract: pre-segmented item not re-split on internal words",
+      r.items.length === 1 && r.items[0] === "Chiro Elves mit Release",
+      "Got items: " + JSON.stringify(r.items));
+  })();
+
+  // --- 18. UNKLAR safety net still runs on LLM-shaped (array) therapie ---
+  (function () {
+    const r = buildOutput(["LWS links schmerzhaft"], ["Vibro PPT", "Chiro Elves"], [], []);
+    assert("Array contract: unknown array item still flagged UNKLAR",
+      r.unklarItems.includes("Chiro Elves"), "UNKLAR: " + JSON.stringify(r.unklarItems));
+    assert("Array contract: known array item not flagged UNKLAR",
+      !r.unklarItems.includes("Vibro PPT"), "UNKLAR: " + JSON.stringify(r.unklarItems));
+  })();
+
+  // --- 19. Grounding / no-invention: buildOutput never adds text beyond input ---
+  (function () {
+    const r = buildOutput(["LWS links heute schmerzhaft"], ["Mobilisation"], [], []);
+    assert("Grounding: no invented cause/duration in befund",
+      !r.note.includes("Gartenarbeit") && !r.note.includes("seit") && !r.note.includes("Wochen"),
+      "Got: " + r.note);
+    assert("Grounding: no invented improvement/diagnosis text",
+      !r.note.toLowerCase().includes("besser") && !r.note.toLowerCase().includes("diagnose"),
+      "Got: " + r.note);
+    assert("Grounding: no Verlauf/Fokus invented when absent from input",
+      !r.note.includes("Verlauf:") && !r.note.includes("Fokus:"),
+      "Got: " + r.note);
+    assert("Grounding: no exercise/plan invented for next session",
+      !r.note.toLowerCase().includes("übung"), "Got: " + r.note);
+  })();
+
+  // --- 20. Fail-honest: AI path down + explicit labels -> marked limited fallback ---
+  await (async function () {
+    const realFetch = window.fetch;
+    window.fetch = async () => { throw new Error("simulated network failure"); };
+    try {
+      const r = await compressTranscriptAsync(
+        "Befund: Schmerzen LWS links. Therapie: Mobilisation, Massage."
+      );
+      assert("Fail-honest: labeled input on AI failure returns status 'fallback'",
+        r.status === "fallback", "Got status: " + r.status);
+      assert("Fail-honest: fallback still renders a usable note",
+        r.note && r.note.includes("Befund:") && r.note.includes("Therapie:"),
+        "Got: " + JSON.stringify(r));
+    } finally {
+      window.fetch = realFetch;
+    }
+  })();
+
+  // --- 21. Fail-honest: AI path down + unlabeled natural dictation -> no misleading note ---
+  await (async function () {
+    const realFetch = window.fetch;
+    window.fetch = async () => { throw new Error("simulated network failure"); };
+    try {
+      const r = await compressTranscriptAsync(
+        "Der Patient kommt rein, Knie rechts tut weh, hat sich beim Fußball verletzt am Wochenende. " +
+        "Ich habe mobilisiert, Faszientechnik gemacht und Tape angelegt."
+      );
+      assert("Fail-honest: unlabeled input on AI failure returns status 'unavailable'",
+        r.status === "unavailable", "Got: " + JSON.stringify(r));
+      assert("Fail-honest: unavailable status carries no note field to render",
+        r.note === undefined, "Got: " + JSON.stringify(r));
+    } finally {
+      window.fetch = realFetch;
+    }
+  })();
+
+  // --- 22. AI path success shape ---
+  await (async function () {
+    const realFetch = window.fetch;
+    window.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        befund: ["Knie rechts tut weh", "beim Fußball verletzt"],
+        therapie: ["Mobilisation", "Faszientechnik", "Tape"],
+        verlauf: ["Reagiert deutlich positiv"],
+        fokus: ["Stabilisationsübungen"]
+      })
+    });
+    try {
+      const r = await compressTranscriptAsync("irrelevant, mocked");
+      assert("AI success: status is 'ai'", r.status === "ai", "Got: " + r.status);
+      assert("AI success: note renders all 4 sections",
+        r.note.includes("Befund:") && r.note.includes("Therapie:") &&
+        r.note.includes("Verlauf:") && r.note.includes("Fokus:"),
+        "Got: " + r.note);
+    } finally {
+      window.fetch = realFetch;
+    }
+  })();
+
+  // --- 23. hasExplicitLabels detection used for fail-honest branching ---
+  (function () {
+    assert("hasExplicitLabels: true for Befund:+Therapie:",
+      hasExplicitLabels("Befund: X. Therapie: Y."));
+    assert("hasExplicitLabels: false for natural unlabeled speech",
+      !hasExplicitLabels("Knie rechts tut weh, ich habe mobilisiert."));
+    assert("hasExplicitLabels: false when only one label present",
+      !hasExplicitLabels("Befund: X. Y wurde gemacht."));
   })();
 
   // --- 14. Ground-truth reference cases ---

@@ -11,15 +11,26 @@ kein Ausgangspunkt für eine größere Produktarchitektur oder eine neue FRAME-P
   `webkitSpeechRecognition`. Kein eigener STT-Server, kein API-Key im Client oder im
   Repo. Es wird nie Audio aufgenommen oder gespeichert — nur der Text, den der Browser
   zurückgibt.
-- **Session-Notiz** (`compress.js`): primär über einen Cloudflare Worker
-  (`worker/`) strukturiert, der den anonymisierten Text an OpenAI (gpt-4.1-mini,
-  structured output) sendet und ein JSON mit `{befund, therapie, verlauf, fokus}`
-  zurückgibt. Der Worker hält den API-Key (`OPENAI_API_KEY`) serverseitig — kein
-  Key im Client. Bei Worker-Ausfall greift eine lokale, deterministische
-  Rückfallebene (`parseTranscript`). Beides durchläuft dieselbe clientseitige
-  UNKLAR-Vokabelprüfung. LLM-Pfad explizit freigegeben von Franklyn (Natural
-  Dictation Proof, 2026-09-09). Minimale Token-Nutzungsdaten werden per
-  Response-Header und Worker-Log erfasst.
+- **Session-Notiz** (`compress.js`): primär strukturiert über die Kette
+  Browser → Cloudflare Worker (`worker/`) → n8n-Workflow (`n8n/frame-gerrit-structure-workflow.json`,
+  `FRAME · Gerrit · Structure Session Note`) → bestehende OpenAI-Credential
+  in n8n → strukturiertes JSON `{befund: [], therapie: [], verlauf: [], fokus: []}`
+  zurück zum Browser. Der Worker besitzt **keinen** LLM-Provider-Key — er hält
+  nur einen begrenzten Header-Token (`N8N_WEBHOOK_TOKEN`), der ausschließlich
+  diesen einen n8n-Webhook autorisiert. Das eigentliche OpenAI-Credential
+  (`ONYX • OpenAI`, bereits produktiv im Franklyn-Ökosystem) bleibt vollständig
+  in n8n — keine zweite Provider-Credential, kein Key-Kopieren.
+  Fail-honest bei Ausfall: bei explizit gelabeltem Input (`Befund:`/`Therapie:`)
+  greift eine lokale, deterministische Rückfallebene (`parseTranscript`),
+  klar als „Begrenzter Fallback" markiert. Bei unlabeled natürlichem Diktat
+  wird **keine** irreführende Struktur gerendert — stattdessen ein ehrlicher
+  Hinweis, das Transkript manuell zu prüfen oder es erneut zu versuchen
+  (`compressTranscriptAsync` Status `"unavailable"`). Beide erfolgreichen Pfade
+  (KI und begrenzter Fallback) durchlaufen dieselbe clientseitige
+  UNKLAR-Vokabelprüfung. Architektur explizit freigegeben von Franklyn
+  (Provider-Migration zu OpenAI/n8n, 2026-09-09). Minimale
+  Token-Nutzungsdaten werden im n8n-Ausführungslog erfasst (kein Dashboard,
+  keine Datenbank).
 - Transkript und Outputs leben nur im Browser-Speicher (JS-Zustand) für die Dauer der
   Session. „Neue Session" und ein Seiten-Reload löschen alles vollständig. Keine
   Persistenz, keine Übertragung — ausgenommen optionales Validierungs-Feedback (Ja/Nein)
@@ -48,8 +59,10 @@ kein Ausgangspunkt für eine größere Produktarchitektur oder eine neue FRAME-P
 ## Nicht tun
 
 - Kein Overengineering: kein Framework, kein Build-Tool, keine neuen Abhängigkeiten.
-- Der Cloudflare Worker (`worker/`) ist der einzige serverseitige Endpunkt.
-  Kein weiterer Service oder Endpunkt ohne ausdrückliche Freigabe von Franklyn.
+- Der Cloudflare Worker (`worker/`) ist der einzige öffentliche Endpunkt und der
+  n8n-Workflow (`n8n/frame-gerrit-structure-workflow.json`) der einzige
+  Strukturierungspfad. Kein weiterer Service, kein zweites OpenAI-Credential,
+  kein direkter OpenAI-Key im Worker ohne ausdrückliche Freigabe von Franklyn.
 - Keine echte Lemmiscus-Integration oder Audio-Persistenz in diesem Repository.
 - Keine neuen Bewertungsdimensionen, Felder oder Fälle ohne Freigabe.
 - Persönliche Kurzschrift nicht als Output-Sprache erzwingen — Gerrit nutzte starke

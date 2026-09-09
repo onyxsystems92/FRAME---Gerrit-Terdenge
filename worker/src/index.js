@@ -1,38 +1,16 @@
-const SYSTEM_PROMPT = `Du strukturierst deutschsprachige physiotherapeutische Sitzungsdiktate.
-
-Gegeben ist ein frei gesprochenes Diktat nach einer Behandlung. Strukturiere den Text in genau diese Kategorien:
-
-- befund: Beschwerden, Befunde, Schmerzlokalisation, Auslöser, Vorgeschichte
-- therapie: Durchgeführte Behandlungen und Techniken, als kommaseparierte Liste
-- verlauf: Veränderung seit letzter Sitzung, Reaktion auf die Behandlung
-- fokus: Plan oder Schwerpunkt für die nächste Sitzung
-
-Regeln:
-1. Nur Information aus dem Diktat verwenden. Nichts hinzufügen oder erfinden.
-2. Wenn eine Kategorie im Diktat nicht vorkommt: leeren String zurückgeben.
-3. Originalwörter des Diktats beibehalten — nur zuordnen, nicht umformulieren.
-4. Keine Diagnosen stellen oder medizinische Schlussfolgerungen ziehen.
-5. Therapie-Begriffe exakt wie diktiert übernehmen, auch wenn sie ungewöhnlich klingen.
-6. Therapie immer als kommaseparierte Liste formatieren (ein Eintrag pro Technik/Maßnahme).`;
-
-const RESPONSE_SCHEMA = {
-  type: "json_schema",
-  json_schema: {
-    name: "session_note",
-    strict: true,
-    schema: {
-      type: "object",
-      properties: {
-        befund: { type: "string" },
-        therapie: { type: "string" },
-        verlauf: { type: "string" },
-        fokus: { type: "string" },
-      },
-      required: ["befund", "therapie", "verlauf", "fokus"],
-      additionalProperties: false,
-    },
-  },
-};
+// Thin, bounded public boundary for the Gerrit Session Intelligence pilot.
+//
+// This Worker owns NO LLM provider key. It only:
+//   1. validates the incoming transcript,
+//   2. forwards it to the existing n8n execution (which holds the account's
+//      existing OpenAI credential and does the actual structuring), using a
+//      bounded header token that gates this one webhook,
+//   3. relays the structured {befund, therapie, verlauf, fokus} response
+//      (or an honest error) back to the browser with the right CORS headers.
+//
+// Secrets (Worker-side, set via `wrangler secret put`):
+//   N8N_WEBHOOK_TOKEN — shared header token for the n8n webhook. NOT an
+//   OpenAI key; the OpenAI credential stays entirely inside n8n.
 
 function corsHeaders(env) {
   return {
@@ -43,16 +21,17 @@ function corsHeaders(env) {
   };
 }
 
-function jsonResponse(body, status, env, extraHeaders) {
+function jsonResponse(body, status, env) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       ...corsHeaders(env),
       "Content-Type": "application/json",
-      ...extraHeaders,
     },
   });
 }
+
+const N8N_WEBHOOK_URL = "https://n8n.franklyn-busse.com/webhook/frame-gerrit-structure";
 
 export default {
   async fetch(request, env) {
@@ -76,75 +55,43 @@ export default {
       return jsonResponse({ error: "transcript required (string, max 10000 chars)" }, 400, env);
     }
 
-    if (!env.OPENAI_API_KEY) {
+    if (!env.N8N_WEBHOOK_TOKEN) {
       return jsonResponse({ error: "Server misconfigured" }, 500, env);
     }
 
-    let apiResponse;
+    let upstream;
     try {
-      apiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+      upstream = await fetch(N8N_WEBHOOK_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+          "X-Webhook-Token": env.N8N_WEBHOOK_TOKEN,
         },
-        body: JSON.stringify({
-          model: "gpt-4.1-mini",
-          max_tokens: 1024,
-          temperature: 0,
-          response_format: RESPONSE_SCHEMA,
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: transcript },
-          ],
-        }),
+        body: JSON.stringify({ transcript }),
       });
     } catch (err) {
-      return jsonResponse({ error: "Upstream request failed" }, 502, env);
+      return jsonResponse({ error: "Structuring service unreachable" }, 502, env);
     }
 
-    if (!apiResponse.ok) {
-      return jsonResponse({ error: "Upstream error" }, 502, env);
-    }
-
-    let apiBody;
+    let upstreamBody;
     try {
-      apiBody = await apiResponse.json();
+      upstreamBody = await upstream.json();
     } catch {
-      return jsonResponse({ error: "Invalid upstream response" }, 502, env);
+      return jsonResponse({ error: "Invalid response from structuring service" }, 502, env);
     }
 
-    const message = apiBody.choices && apiBody.choices[0] && apiBody.choices[0].message;
-    if (!message || !message.content) {
-      return jsonResponse({ error: "Empty upstream response" }, 502, env);
+    if (!upstream.ok || upstreamBody.error) {
+      return jsonResponse({ error: upstreamBody.error || "Structuring failed" }, 502, env);
     }
 
-    let structured;
-    try {
-      structured = JSON.parse(message.content);
-    } catch {
-      return jsonResponse({ error: "Could not parse structured response" }, 502, env);
-    }
-
+    const toArray = (v) => (Array.isArray(v) ? v.filter((s) => typeof s === "string") : []);
     const result = {
-      befund: typeof structured.befund === "string" ? structured.befund : "",
-      therapie: typeof structured.therapie === "string" ? structured.therapie : "",
-      verlauf: typeof structured.verlauf === "string" ? structured.verlauf : "",
-      fokus: typeof structured.fokus === "string" ? structured.fokus : "",
+      befund: toArray(upstreamBody.befund),
+      therapie: toArray(upstreamBody.therapie),
+      verlauf: toArray(upstreamBody.verlauf),
+      fokus: toArray(upstreamBody.fokus),
     };
 
-    // Minimal cost observability via response headers
-    const usage = apiBody.usage;
-    const usageHeaders = {};
-    if (usage) {
-      usageHeaders["X-Usage-Prompt-Tokens"] = String(usage.prompt_tokens || 0);
-      usageHeaders["X-Usage-Completion-Tokens"] = String(usage.completion_tokens || 0);
-      usageHeaders["X-Usage-Total-Tokens"] = String(usage.total_tokens || 0);
-      console.log(
-        `[usage] model=gpt-4.1-mini prompt=${usage.prompt_tokens} completion=${usage.completion_tokens} total=${usage.total_tokens}`
-      );
-    }
-
-    return jsonResponse(result, 200, env, usageHeaders);
+    return jsonResponse(result, 200, env);
   },
 };

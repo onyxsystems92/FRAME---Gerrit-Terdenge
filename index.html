@@ -47,6 +47,12 @@
       <div class="recorder-state" id="transcript-review" hidden>
         <h3>Transkript</h3>
         <textarea id="transcript-text" rows="6" aria-label="Transkript (editierbar)"></textarea>
+
+        <p class="pilot-status-message warning" id="unavailable-notice" hidden>
+          Die intelligente Strukturierung ist gerade nicht verfügbar. Du kannst
+          das Transkript oben prüfen oder es später erneut versuchen.
+        </p>
+
         <div class="recorder-actions">
           <button type="button" id="btn-compress" class="btn btn-primary">Notiz erstellen</button>
           <button type="button" id="btn-reset-1" class="btn btn-secondary">Neue Session</button>
@@ -76,8 +82,9 @@
         </div>
 
         <p class="pilot-status-message warning" id="fallback-notice" hidden>
-          Hinweis: Notiz wurde lokal strukturiert (ohne KI-Unterstützung).
-          Bei freiem Diktat ohne Stichwörter kann die Zuordnung ungenau sein.
+          Begrenzter Fallback: Notiz wurde regelbasiert aus den Labels
+          „Befund:“/„Therapie:“ erstellt (keine KI-Strukturierung gerade
+          verfügbar). Bitte besonders sorgfältig prüfen.
         </p>
 
         <div class="pilot-feedback" id="pilot-feedback">
