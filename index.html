@@ -24,6 +24,8 @@
       <div class="pilot-notice">
         <strong>Pilotphase</strong> — ausschließlich vollständig anonymisierte Angaben
         verwenden. Keine Namen oder identifizierenden Patientendaten einsprechen.
+        Zur Strukturierung wird der anonymisierte Text an einen geschützten
+        Verarbeitungsdienst gesendet.
       </div>
 
       <p class="pilot-status-message" id="pilot-message" role="status" aria-live="polite"></p>
@@ -73,6 +75,11 @@
           <ul id="unklar-list"></ul>
         </div>
 
+        <p class="pilot-status-message warning" id="fallback-notice" hidden>
+          Hinweis: Notiz wurde lokal strukturiert (ohne KI-Unterstützung).
+          Bei freiem Diktat ohne Stichwörter kann die Zuordnung ungenau sein.
+        </p>
+
         <div class="pilot-feedback" id="pilot-feedback">
           <div class="feedback-questions">
             <div class="question" data-key="verwendbar">
@@ -111,7 +118,7 @@
   </main>
 
   <footer class="page-footer">
-    <p>Kein Backend, keine API, kein LLM, keine Lemmiscus-Integration, keine Datenbank, kein Tracking. Fachliche Entscheidung bleibt bei Gerrit.</p>
+    <p>Optionale KI-Strukturierung über geschützten Verarbeitungsdienst, mit lokaler Rückfallebene. Keine Lemmiscus-Integration, keine Datenbank, kein Tracking. Fachliche Entscheidung bleibt bei Gerrit.</p>
   </footer>
 
   <script src="recorder.js"></script>

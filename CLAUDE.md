@@ -11,10 +11,13 @@ kein Ausgangspunkt für eine größere Produktarchitektur oder eine neue FRAME-P
   `webkitSpeechRecognition`. Kein eigener STT-Server, kein API-Key im Client oder im
   Repo. Es wird nie Audio aufgenommen oder gespeichert — nur der Text, den der Browser
   zurückgibt.
-- **Session-Notiz** (`compress.js`): deterministisch, regelbasiert, ohne Netzwerkaufruf
-  und ohne LLM. Kein Wechsel auf einen LLM-Aufruf ohne ausdrückliche Freigabe von
-  Franklyn — das würde einen serverseitigen Schlüssel-Proxy nötig machen, was bewusst
-  vermieden wurde, solange die regelbasierte Lösung ausreicht.
+- **Session-Notiz** (`compress.js`): primär über einen Cloudflare Worker
+  (`worker/`) strukturiert, der den anonymisierten Text an Claude Haiku sendet und
+  ein JSON mit `{befund, therapie, verlauf, fokus}` zurückgibt. Der Worker hält den
+  API-Key serverseitig — kein Key im Client. Bei Worker-Ausfall greift eine lokale,
+  deterministische Rückfallebene (`parseTranscript`). Beides durchläuft dieselbe
+  clientseitige UNKLAR-Vokabelprüfung. LLM-Pfad explizit freigegeben von Franklyn
+  (Natural Dictation Proof, 2026-09-09).
 - Transkript und Outputs leben nur im Browser-Speicher (JS-Zustand) für die Dauer der
   Session. „Neue Session" und ein Seiten-Reload löschen alles vollständig. Keine
   Persistenz, keine Übertragung — ausgenommen optionales Validierungs-Feedback (Ja/Nein)
@@ -43,8 +46,8 @@ kein Ausgangspunkt für eine größere Produktarchitektur oder eine neue FRAME-P
 ## Nicht tun
 
 - Kein Overengineering: kein Framework, kein Build-Tool, keine neuen Abhängigkeiten.
-- Kein LLM-/API-Aufruf, kein serverseitiger Endpunkt ohne ausdrückliche Freigabe von
-  Franklyn — und dann nur der kleinstmögliche Processing-Endpunkt, kein neuer Service.
+- Der Cloudflare Worker (`worker/`) ist der einzige serverseitige Endpunkt.
+  Kein weiterer Service oder Endpunkt ohne ausdrückliche Freigabe von Franklyn.
 - Keine echte Lemmiscus-Integration oder Audio-Persistenz in diesem Repository.
 - Keine neuen Bewertungsdimensionen, Felder oder Fälle ohne Freigabe.
 - Persönliche Kurzschrift nicht als Output-Sprache erzwingen — Gerrit nutzte starke

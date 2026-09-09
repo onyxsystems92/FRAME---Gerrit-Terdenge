@@ -33,7 +33,8 @@
     btnReset1: document.getElementById("btn-reset-1"),
     btnReset2: document.getElementById("btn-reset-2"),
     feedback: document.getElementById("pilot-feedback"),
-    feedbackSaved: document.getElementById("pilot-feedback-saved")
+    feedbackSaved: document.getElementById("pilot-feedback-saved"),
+    fallbackNotice: document.getElementById("fallback-notice")
   };
 
   let currentFeedback = {};
@@ -151,20 +152,35 @@
   els.btnStop.addEventListener("click", () => recorder.stop());
   els.btnCancel.addEventListener("click", resetAll);
 
-  els.btnCompress.addEventListener("click", () => {
+  els.btnCompress.addEventListener("click", async () => {
     const text = els.transcriptText.value.trim();
     if (!text) {
       showMessage("Bitte zuerst ein Transkript eingeben oder aufnehmen.", "warning");
       return;
     }
     clearMessage();
-    const { note, brief, unklarItems } = compressTranscript(text);
-    els.note.value = note;
-    els.brief.value = brief;
 
-    if (unklarItems.length > 0) {
+    const originalLabel = els.btnCompress.textContent;
+    els.btnCompress.textContent = "Wird verarbeitet…";
+    els.btnCompress.disabled = true;
+
+    let result;
+    try {
+      result = await compressTranscriptAsync(text);
+    } catch {
+      result = compressTranscript(text);
+      result.source = "local";
+    }
+
+    els.btnCompress.textContent = originalLabel;
+    els.btnCompress.disabled = false;
+
+    els.note.value = result.note;
+    els.brief.value = result.brief;
+
+    if (result.unklarItems.length > 0) {
       els.unklarList.innerHTML = "";
-      unklarItems.forEach(item => {
+      result.unklarItems.forEach(item => {
         const li = document.createElement("li");
         li.textContent = item;
         els.unklarList.appendChild(li);
@@ -172,6 +188,10 @@
       els.unklarBox.hidden = false;
     } else {
       els.unklarBox.hidden = true;
+    }
+
+    if (els.fallbackNotice) {
+      els.fallbackNotice.hidden = result.source !== "local" || !STRUCTURE_API_URL;
     }
 
     clearFeedbackToggles();

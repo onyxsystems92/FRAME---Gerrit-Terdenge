@@ -1,0 +1,6 @@
+name = "frame-gerrit-structure"
+main = "src/index.js"
+compatibility_date = "2024-09-01"
+
+[vars]
+ALLOWED_ORIGIN = "https://onyxsystems92.github.io"

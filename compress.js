@@ -208,12 +208,7 @@ function formatItemsForDisplay(recognized, unklar, items) {
     .join(", ");
 }
 
-/**
- * Main entry point: takes the edited transcript and returns
- * { note, brief, unklarItems }.
- */
-function compressTranscript(rawText) {
-  const { befund, therapie, verlauf, fokus } = parseTranscript(rawText);
+function buildOutput(befund, therapie, verlauf, fokus) {
   const { recognized, unklar, items } = classifyTherapyItems(therapie);
   const therapieDisplay = formatItemsForDisplay(recognized, unklar, items);
 
@@ -232,4 +227,39 @@ function compressTranscript(rawText) {
   const brief = briefLines.join("\n");
 
   return { note, brief, unklarItems: unklar };
+}
+
+function compressTranscript(rawText) {
+  const { befund, therapie, verlauf, fokus } = parseTranscript(rawText);
+  return buildOutput(befund, therapie, verlauf, fokus);
+}
+
+// --- LLM structuring path (optional, requires Worker) ---
+
+var STRUCTURE_API_URL = "https://frame-gerrit-structure.franklyn-busse.workers.dev";
+
+async function structureWithLLM(rawText) {
+  if (!STRUCTURE_API_URL) throw new Error("No API URL configured");
+  const resp = await fetch(STRUCTURE_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transcript: rawText }),
+  });
+  if (!resp.ok) throw new Error(`API ${resp.status}`);
+  const data = await resp.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+async function compressTranscriptAsync(rawText) {
+  try {
+    const { befund, therapie, verlauf, fokus } = await structureWithLLM(rawText);
+    const result = buildOutput(befund, therapie, verlauf, fokus);
+    result.source = "llm";
+    return result;
+  } catch {
+    const result = compressTranscript(rawText);
+    result.source = "local";
+    return result;
+  }
 }
