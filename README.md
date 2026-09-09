@@ -7,20 +7,19 @@ Lemmiscus bleibt das führende System — dieses Tool nimmt nur das Schreiben ab
 ## Was das hier ist
 
 - Reine statische Seite (HTML/CSS/Vanilla JS), kein Build-Schritt, keine Abhängigkeiten.
-- Kein Backend, keine API, kein LLM-Aufruf, keine Lemmiscus-Integration, keine Datenbank,
-  kein Tracking.
+- Kein lokales Backend, keine Datenbank, kein Tracking, keine Lemmiscus-Integration.
 - **Spracherkennung**: der Browser-eigene `SpeechRecognition`/`webkitSpeechRecognition`
   (Chrome, Edge, Safari). Kein eigener API-Key, kein eigener Server — Audio geht direkt
   an die Spracherkennung des Browsers, nie an diesen Code.
 - **Session-Notiz** ([`compress.js`](compress.js)): strukturiert den anonymisierten
-  Text über einen Cloudflare Worker ([`worker/`](worker/)), der Claude Haiku als
-  begrenzten Strukturierungsdienst nutzt — kein API-Key im Client, keine
-  Diagnosefunktion, keine erfundenen Inhalte. Bei Worker-Ausfall greift eine lokale,
-  deterministische Rückfallebene. Beide Pfade durchlaufen dieselbe clientseitige
-  UNKLAR-Vokabelprüfung: jeder Therapie-Begriff, der nicht in der physiotherapeutischen
-  Standardvokabelliste steht, wird als `UNKLAR` markiert statt erraten. Nur etablierte
-  Fachkürzel (HWS, BWS, LWS) werden angewendet — persönliche Kurzformen werden nicht
-  erzwungen.
+  Text über einen Cloudflare Worker ([`worker/`](worker/)), der OpenAI (gpt-4.1-mini,
+  structured output) als begrenzten Strukturierungsdienst nutzt — kein API-Key im
+  Client, keine Diagnosefunktion, keine erfundenen Inhalte. Bei Worker-Ausfall greift
+  eine lokale, deterministische Rückfallebene. Beide Pfade durchlaufen dieselbe
+  clientseitige UNKLAR-Vokabelprüfung: jeder Therapie-Begriff, der nicht in der
+  physiotherapeutischen Standardvokabelliste steht, wird als `UNKLAR` markiert statt
+  erraten. Nur etablierte Fachkürzel (HWS, BWS, LWS) werden angewendet — persönliche
+  Kurzformen werden nicht erzwungen.
 - Session-Notiz und Next Session Brief sind editierbar, mit Kopieren-Button. „Neue Session"
   setzt den gesamten Zustand zurück — nur optionales Validierungs-Feedback (Ja/Nein) wird
   lokal gespeichert.

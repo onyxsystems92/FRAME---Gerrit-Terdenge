@@ -12,12 +12,14 @@ kein Ausgangspunkt für eine größere Produktarchitektur oder eine neue FRAME-P
   Repo. Es wird nie Audio aufgenommen oder gespeichert — nur der Text, den der Browser
   zurückgibt.
 - **Session-Notiz** (`compress.js`): primär über einen Cloudflare Worker
-  (`worker/`) strukturiert, der den anonymisierten Text an Claude Haiku sendet und
-  ein JSON mit `{befund, therapie, verlauf, fokus}` zurückgibt. Der Worker hält den
-  API-Key serverseitig — kein Key im Client. Bei Worker-Ausfall greift eine lokale,
-  deterministische Rückfallebene (`parseTranscript`). Beides durchläuft dieselbe
-  clientseitige UNKLAR-Vokabelprüfung. LLM-Pfad explizit freigegeben von Franklyn
-  (Natural Dictation Proof, 2026-09-09).
+  (`worker/`) strukturiert, der den anonymisierten Text an OpenAI (gpt-4.1-mini,
+  structured output) sendet und ein JSON mit `{befund, therapie, verlauf, fokus}`
+  zurückgibt. Der Worker hält den API-Key (`OPENAI_API_KEY`) serverseitig — kein
+  Key im Client. Bei Worker-Ausfall greift eine lokale, deterministische
+  Rückfallebene (`parseTranscript`). Beides durchläuft dieselbe clientseitige
+  UNKLAR-Vokabelprüfung. LLM-Pfad explizit freigegeben von Franklyn (Natural
+  Dictation Proof, 2026-09-09). Minimale Token-Nutzungsdaten werden per
+  Response-Header und Worker-Log erfasst.
 - Transkript und Outputs leben nur im Browser-Speicher (JS-Zustand) für die Dauer der
   Session. „Neue Session" und ein Seiten-Reload löschen alles vollständig. Keine
   Persistenz, keine Übertragung — ausgenommen optionales Validierungs-Feedback (Ja/Nein)

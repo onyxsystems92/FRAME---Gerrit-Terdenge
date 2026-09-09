@@ -13,10 +13,26 @@ Regeln:
 3. Originalwörter des Diktats beibehalten — nur zuordnen, nicht umformulieren.
 4. Keine Diagnosen stellen oder medizinische Schlussfolgerungen ziehen.
 5. Therapie-Begriffe exakt wie diktiert übernehmen, auch wenn sie ungewöhnlich klingen.
-6. Therapie immer als kommaseparierte Liste formatieren (ein Eintrag pro Technik/Maßnahme).
+6. Therapie immer als kommaseparierte Liste formatieren (ein Eintrag pro Technik/Maßnahme).`;
 
-Antworte ausschließlich mit einem JSON-Objekt, ohne Erklärung:
-{"befund":"...","therapie":"...","verlauf":"...","fokus":"..."}`;
+const RESPONSE_SCHEMA = {
+  type: "json_schema",
+  json_schema: {
+    name: "session_note",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        befund: { type: "string" },
+        therapie: { type: "string" },
+        verlauf: { type: "string" },
+        fokus: { type: "string" },
+      },
+      required: ["befund", "therapie", "verlauf", "fokus"],
+      additionalProperties: false,
+    },
+  },
+};
 
 function corsHeaders(env) {
   return {
@@ -27,12 +43,13 @@ function corsHeaders(env) {
   };
 }
 
-function jsonResponse(body, status, env) {
+function jsonResponse(body, status, env, extraHeaders) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       ...corsHeaders(env),
       "Content-Type": "application/json",
+      ...extraHeaders,
     },
   });
 }
@@ -59,24 +76,27 @@ export default {
       return jsonResponse({ error: "transcript required (string, max 10000 chars)" }, 400, env);
     }
 
-    if (!env.ANTHROPIC_API_KEY) {
+    if (!env.OPENAI_API_KEY) {
       return jsonResponse({ error: "Server misconfigured" }, 500, env);
     }
 
     let apiResponse;
     try {
-      apiResponse = await fetch("https://api.anthropic.com/v1/messages", {
+      apiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": env.ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
+          Authorization: `Bearer ${env.OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
+          model: "gpt-4.1-mini",
           max_tokens: 1024,
-          system: SYSTEM_PROMPT,
-          messages: [{ role: "user", content: transcript }],
+          temperature: 0,
+          response_format: RESPONSE_SCHEMA,
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: transcript },
+          ],
         }),
       });
     } catch (err) {
@@ -94,21 +114,14 @@ export default {
       return jsonResponse({ error: "Invalid upstream response" }, 502, env);
     }
 
-    const text =
-      apiBody.content &&
-      apiBody.content[0] &&
-      apiBody.content[0].type === "text" &&
-      apiBody.content[0].text;
-
-    if (!text) {
+    const message = apiBody.choices && apiBody.choices[0] && apiBody.choices[0].message;
+    if (!message || !message.content) {
       return jsonResponse({ error: "Empty upstream response" }, 502, env);
     }
 
     let structured;
     try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("No JSON found");
-      structured = JSON.parse(jsonMatch[0]);
+      structured = JSON.parse(message.content);
     } catch {
       return jsonResponse({ error: "Could not parse structured response" }, 502, env);
     }
@@ -120,6 +133,18 @@ export default {
       fokus: typeof structured.fokus === "string" ? structured.fokus : "",
     };
 
-    return jsonResponse(result, 200, env);
+    // Minimal cost observability via response headers
+    const usage = apiBody.usage;
+    const usageHeaders = {};
+    if (usage) {
+      usageHeaders["X-Usage-Prompt-Tokens"] = String(usage.prompt_tokens || 0);
+      usageHeaders["X-Usage-Completion-Tokens"] = String(usage.completion_tokens || 0);
+      usageHeaders["X-Usage-Total-Tokens"] = String(usage.total_tokens || 0);
+      console.log(
+        `[usage] model=gpt-4.1-mini prompt=${usage.prompt_tokens} completion=${usage.completion_tokens} total=${usage.total_tokens}`
+      );
+    }
+
+    return jsonResponse(result, 200, env, usageHeaders);
   },
 };
