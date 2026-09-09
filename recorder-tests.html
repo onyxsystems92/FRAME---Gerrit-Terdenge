@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FRAME Recorder Tests</title>
+<style>
+  body { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; margin: 24px; background: #faf9f7; }
+  .pass { color: #1a7a2e; } .fail { color: #c0392b; font-weight: bold; }
+  pre { background: #fff; border: 1px solid #ddd; padding: 10px; white-space: pre-wrap; margin: 4px 0 16px; }
+  .summary { font-size: 15px; margin-top: 24px; padding: 12px; border-radius: 8px; }
+  .summary.ok { background: #d4edda; color: #155724; }
+  .summary.bad { background: #f8d7da; color: #721c24; }
+</style>
+</head>
+<body>
+<h1>FRAME · Recorder Lifecycle Tests</h1>
+<div id="output"></div>
+<script>
+class MockSpeechRecognition {
+  static instances = [];
+  constructor() {
+    this.lang = "";
+    this.continuous = false;
+    this.interimResults = false;
+    this.onresult = null;
+    this.onerror = null;
+    this.onend = null;
+    this.started = false;
+    this.stopCalled = false;
+    this.abortCalled = false;
+    MockSpeechRecognition.instances.push(this);
+  }
+  start() { this.started = true; }
+  stop() { this.stopCalled = true; }
+  abort() { this.abortCalled = true; }
+  emitResult(parts, resultIndex = 0) {
+    const results = parts.map(({ text, final }) => {
+      const result = [{ transcript: text }];
+      result.isFinal = Boolean(final);
+      return result;
+    });
+    this.onresult && this.onresult({ resultIndex, results });
+  }
+  emitEnd() { this.onend && this.onend(); }
+  emitError(type) { this.onerror && this.onerror({ error: type }); }
+}
+window.SpeechRecognition = MockSpeechRecognition;
+</script>
+<script src="recorder.js?v=3"></script>
+<script>
+(function () {
+  const out = document.getElementById("output");
+  let passed = 0;
+  let failed = 0;
+
+  function assert(name, condition, detail = "") {
+    if (condition) {
+      passed++;
+      out.innerHTML += `<p class="pass">✓ ${name}</p>`;
+    } else {
+      failed++;
+      out.innerHTML += `<p class="fail">✗ ${name}</p>`;
+      if (detail) out.innerHTML += `<pre>${detail}</pre>`;
+    }
+  }
+
+  function harness() {
+    const events = { finals: [], interim: [], states: [], errors: [] };
+    const recorder = createRecorder({
+      onInterim(finalSoFar, interim) { events.interim.push({ finalSoFar, interim }); },
+      onFinal(text) { events.finals.push(text); },
+      onStateChange(state) { events.states.push(state); },
+      onError(err) { events.errors.push(err.type); },
+      onTick() {}
+    });
+    recorder.start();
+    const recognition = MockSpeechRecognition.instances.at(-1);
+    return { recorder, recognition, events };
+  }
+
+  // 1. Explicit Stop waits for late final result and emits once.
+  {
+    const { recorder, recognition, events } = harness();
+    recognition.emitResult([{ text: "Knie rechts tut weh", final: false }]);
+    recorder.stop();
+    assert("Stop does not finalize before browser lifecycle ends", events.finals.length === 0);
+    recognition.emitResult([{ text: "Knie rechts tut weh", final: true }]);
+    recognition.emitEnd();
+    assert("Late final result after Stop is preserved", events.finals[0] === "Knie rechts tut weh", JSON.stringify(events));
+    assert("Explicit Stop emits onFinal exactly once", events.finals.length === 1, JSON.stringify(events.finals));
+  }
+
+  // 2. Interim-only speech is preserved if browser ends without finalizing it.
+  {
+    const { recorder, recognition, events } = harness();
+    recognition.emitResult([{ text: "Mobilisation durchgeführt", final: false }]);
+    recorder.stop();
+    recognition.emitEnd();
+    assert("Interim-only speech survives explicit Stop", events.finals[0] === "Mobilisation durchgeführt", JSON.stringify(events));
+  }
+
+  // 3. Already-final text remains intact on Stop.
+  {
+    const { recorder, recognition, events } = harness();
+    recognition.emitResult([{ text: "LWS links schmerzhaft", final: true }]);
+    recorder.stop();
+    recognition.emitEnd();
+    assert("Already-final speech survives Stop", events.finals[0] === "LWS links schmerzhaft", JSON.stringify(events));
+  }
+
+  // 4. Multiple final chunks plus a live interim tail are combined once.
+  {
+    const { recorder, recognition, events } = harness();
+    recognition.emitResult([
+      { text: "Befund Knie rechts. ", final: true },
+      { text: "Tape angelegt", final: false }
+    ]);
+    recorder.stop();
+    recognition.emitEnd();
+    assert("Final chunks and interim tail are combined", events.finals[0] === "Befund Knie rechts. Tape angelegt", JSON.stringify(events));
+  }
+
+  // 5. Browser auto-end finalizes without a user Stop.
+  {
+    const { recognition, events } = harness();
+    recognition.emitResult([{ text: "Schulter mobilisiert", final: false }]);
+    recognition.emitEnd();
+    assert("Browser auto-end preserves visible recognized speech", events.finals[0] === "Schulter mobilisiert", JSON.stringify(events));
+    assert("Browser auto-end emits exactly once", events.finals.length === 1);
+  }
+
+  // 6. Duplicate end events cannot duplicate onFinal.
+  {
+    const { recorder, recognition, events } = harness();
+    recognition.emitResult([{ text: "Massage", final: true }]);
+    recorder.stop();
+    recognition.emitEnd();
+    recognition.emitEnd();
+    assert("Duplicate onend cannot duplicate finalization", events.finals.length === 1, JSON.stringify(events.finals));
+  }
+
+  // 7. Cancel never yields a transcript even if browser later ends.
+  {
+    const { recorder, recognition, events } = harness();
+    recognition.emitResult([{ text: "Text der verworfen werden soll", final: false }]);
+    recorder.cancel();
+    recognition.emitEnd();
+    assert("Cancel never emits onFinal", events.finals.length === 0, JSON.stringify(events));
+    assert("Cancel aborts recognition", recognition.abortCalled === true);
+  }
+
+  // 8. Empty recognition returns to idle with no-speech instead of review flow.
+  {
+    const { recorder, recognition, events } = harness();
+    recorder.stop();
+    recognition.emitEnd();
+    assert("Empty recognition does not emit onFinal", events.finals.length === 0, JSON.stringify(events));
+    assert("Empty recognition emits no-speech", events.errors.includes("no-speech"), JSON.stringify(events));
+    assert("Empty recognition returns to idle", events.states.at(-1) === "idle", JSON.stringify(events.states));
+  }
+
+  const summary = document.createElement("div");
+  summary.className = "summary " + (failed ? "bad" : "ok");
+  summary.textContent = `${passed} passed, ${failed} failed`;
+  out.appendChild(summary);
+})();
+</script>
+</body>
+</html>
