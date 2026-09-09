@@ -9,17 +9,17 @@
 <body>
   <header class="page-header">
     <p class="eyebrow">FRAME · Session Intelligence</p>
-    <h1>Nach-Diktierung verdichten</h1>
+    <h1>Session-Notiz erstellen</h1>
     <p class="intro">
-      Nach jeder Behandlung: kurz einsprechen, prüfen, manuell nach Lemmiscus übernehmen.
-      Lemmiscus bleibt das führende System — dieses Tool ersetzt es nicht, es nimmt nur
-      das Schreiben ab.
+      Nach jeder Behandlung kurz einsprechen, Notiz erstellen lassen, prüfen,
+      manuell nach Lemmiscus übernehmen. Lemmiscus bleibt das führende System —
+      dieses Tool nimmt nur das Schreiben ab.
     </p>
   </header>
 
   <main>
     <section class="pilot-section" aria-labelledby="pilot-heading">
-      <h2 id="pilot-heading">Neue Nach-Diktierung</h2>
+      <h2 id="pilot-heading">Neue Session-Notiz</h2>
 
       <div class="pilot-notice">
         <strong>Pilotphase</strong> — ausschließlich vollständig anonymisierte Angaben
@@ -46,7 +46,7 @@
         <h3>Transkript</h3>
         <textarea id="transcript-text" rows="6" aria-label="Transkript (editierbar)"></textarea>
         <div class="recorder-actions">
-          <button type="button" id="btn-compress" class="btn btn-primary">Verdichten</button>
+          <button type="button" id="btn-compress" class="btn btn-primary">Notiz erstellen</button>
           <button type="button" id="btn-reset-1" class="btn btn-secondary">Neue Session</button>
         </div>
       </div>
@@ -54,10 +54,10 @@
       <div class="recorder-state outputs" id="outputs" hidden>
         <div class="output-box">
           <div class="output-header">
-            <h3>Lemmiscus-Kurznotiz</h3>
-            <button type="button" class="btn-copy" data-target="output-kurznotiz">Kopieren</button>
+            <h3>Session-Notiz</h3>
+            <button type="button" class="btn-copy" data-target="output-note">Kopieren</button>
           </div>
-          <textarea id="output-kurznotiz" rows="4" aria-label="Lemmiscus-Kurznotiz (editierbar)"></textarea>
+          <textarea id="output-note" rows="5" aria-label="Session-Notiz (editierbar)"></textarea>
         </div>
 
         <div class="output-box">
@@ -65,12 +65,32 @@
             <h3>Next Session Brief</h3>
             <button type="button" class="btn-copy" data-target="output-brief">Kopieren</button>
           </div>
-          <textarea id="output-brief" rows="6" aria-label="Next Session Brief (editierbar)"></textarea>
+          <textarea id="output-brief" rows="5" aria-label="Next Session Brief (editierbar)"></textarea>
         </div>
 
         <div class="unklar-box" id="unklar-box" hidden>
           <h3>Bitte prüfen / unklar</h3>
           <ul id="unklar-list"></ul>
+        </div>
+
+        <div class="pilot-feedback" id="pilot-feedback">
+          <div class="feedback-questions">
+            <div class="question" data-key="verwendbar">
+              <span class="question-label">Direkt verwendbar?</span>
+              <div class="toggle-group" role="group" aria-label="Direkt verwendbar?">
+                <button type="button" class="toggle" data-value="ja">Ja</button>
+                <button type="button" class="toggle" data-value="nein">Nein</button>
+              </div>
+            </div>
+            <div class="question" data-key="einfacher">
+              <span class="question-label">Einfacher als selbst schreiben?</span>
+              <div class="toggle-group" role="group" aria-label="Einfacher als selbst schreiben?">
+                <button type="button" class="toggle" data-value="ja">Ja</button>
+                <button type="button" class="toggle" data-value="nein">Nein</button>
+              </div>
+            </div>
+          </div>
+          <p class="saved-indicator" id="pilot-feedback-saved" aria-live="polite"></p>
         </div>
 
         <div class="recorder-actions">
@@ -80,11 +100,11 @@
     </section>
 
     <section class="examples-section" aria-labelledby="examples-heading">
-      <h2 id="examples-heading">Beispiele aus deinen bisherigen Angaben</h2>
+      <h2 id="examples-heading">Referenzbeispiele</h2>
       <p class="intro">
-        Drei anonymisierte Beispiele aus den bereitgestellten Angaben. Sie dienen nur zur
-        Orientierung und Output-Validierung, nicht als Live-Funktion — die Bewertung pro
-        Fall bleibt ausschließlich lokal in diesem Browser gespeichert.
+        Drei anonymisierte Beispiele — die Notiz und der Brief werden live aus dem
+        Input erzeugt, identisch zur Funktion oben. Die Bewertung pro Fall bleibt
+        ausschließlich lokal in diesem Browser gespeichert.
       </p>
       <div id="cases"></div>
     </section>

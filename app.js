@@ -1,8 +1,8 @@
-const STORAGE_KEY = "frame-gerrit-feedback-v1";
+const STORAGE_KEY = "frame-gerrit-feedback-v2";
 const QUESTIONS = [
   { key: "korrekt", label: "Fachlich korrekt?" },
-  { key: "uebernehmbar", label: "Direkt übernehmbar?" },
-  { key: "wiedereinstieg", label: "Hilft beim Wiedereinstieg?" }
+  { key: "verwendbar", label: "Direkt verwendbar?" },
+  { key: "verstaendlich", label: "Verständlich?" }
 ];
 
 function loadFeedback() {
@@ -21,23 +21,29 @@ function highlightUnklar(text) {
   return text.replace(/\[UNKLAR: ([^\]]+)\]/g, '<span class="unklar">UNKLAR: $1</span>');
 }
 
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 function renderCase(c, feedback) {
+  const { note, brief } = compressTranscript(c.input);
+
   const article = document.createElement("article");
   article.className = "case-card";
   article.innerHTML = `
-    <h2>${c.title}</h2>
+    <h2>${escapeHtml(c.title)}</h2>
     <div class="case-columns">
       <section class="col">
         <h3>Input</h3>
-        <pre class="text-block">${c.input}</pre>
+        <pre class="text-block">${escapeHtml(c.input)}</pre>
       </section>
       <section class="col">
-        <h3>Lemmiscus-Kurznotiz</h3>
-        <pre class="text-block">${highlightUnklar(c.note)}</pre>
+        <h3>Session-Notiz</h3>
+        <pre class="text-block">${highlightUnklar(escapeHtml(note))}</pre>
       </section>
       <section class="col">
         <h3>Next Session Brief</h3>
-        <pre class="text-block">${highlightUnklar(c.brief)}</pre>
+        <pre class="text-block">${highlightUnklar(escapeHtml(brief))}</pre>
       </section>
     </div>
     <div class="feedback" data-case="${c.id}">

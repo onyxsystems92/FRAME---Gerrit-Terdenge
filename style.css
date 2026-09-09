@@ -207,6 +207,18 @@ textarea {
   padding: 14px 18px;
 }
 
+.pilot-feedback {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.feedback-questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: center;
+}
+
 .unklar-box h3 {
   margin: 0 0 8px;
   color: var(--unklar-text);

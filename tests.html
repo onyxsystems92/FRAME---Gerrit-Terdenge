@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FRAME Compress Tests</title>
+<style>
+  body { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; margin: 24px; background: #faf9f7; }
+  .pass { color: #1a7a2e; } .fail { color: #c0392b; font-weight: bold; }
+  pre { background: #fff; border: 1px solid #ddd; padding: 10px; white-space: pre-wrap; margin: 4px 0 16px; }
+  h2 { font-size: 15px; margin: 24px 0 8px; }
+  .summary { font-size: 15px; margin-top: 24px; padding: 12px; border-radius: 8px; }
+  .summary.ok { background: #d4edda; color: #155724; }
+  .summary.bad { background: #f8d7da; color: #721c24; }
+</style>
+</head>
+<body>
+<h1>FRAME · Compress Engine — Tests</h1>
+<div id="output"></div>
+<script src="compress.js"></script>
+<script>
+(function () {
+  const out = document.getElementById("output");
+  let passed = 0, failed = 0;
+
+  function assert(name, condition, detail) {
+    if (condition) {
+      passed++;
+      out.innerHTML += `<p class="pass">✓ ${esc(name)}</p>`;
+    } else {
+      failed++;
+      out.innerHTML += `<p class="fail">✗ ${esc(name)}</p>`;
+      if (detail) out.innerHTML += `<pre>${esc(detail)}</pre>`;
+    }
+  }
+
+  function esc(s) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+  // --- 1. Normal full-sentence labeled dictation ---
+  (function () {
+    const r = compressTranscript(
+      "Befund: Schmerzen Lendenwirbelsäule links seit drei Tagen. Therapie: Manuelle Therapie, Mobilisation."
+    );
+    assert("Labeled input: note has Befund + Therapie sections",
+      r.note.includes("Befund:") && r.note.includes("Therapie:"));
+    assert("Labeled input: standard abbreviation LWS applied",
+      r.note.includes("LWS"), "Got: " + r.note);
+    assert("Labeled input: 'links' stays as full word (no li.)",
+      r.note.includes("links") && !r.note.includes("li."), "Got: " + r.note);
+    assert("Labeled input: no UNKLAR items for recognized techniques",
+      r.unklarItems.length === 0, "UNKLAR: " + JSON.stringify(r.unklarItems));
+  })();
+
+  // --- 2. Standard professional abbreviations ---
+  (function () {
+    const r = compressTranscript(
+      "Befund: Halswirbelsäule rechts. Therapie: Brustwirbelsäule Mobilisation."
+    );
+    assert("HWS abbreviation applied", r.note.includes("HWS"), "Got: " + r.note);
+    assert("BWS abbreviation applied", r.note.includes("BWS"), "Got: " + r.note);
+    assert("'rechts' stays as full word (no re.)",
+      r.note.includes("rechts") && !r.note.includes("re."), "Got: " + r.note);
+  })();
+
+  // --- 3. Personal shorthand NOT forced ---
+  (function () {
+    const r = compressTranscript(
+      "Befund: Beschwerden nach Gartenarbeit, komplett rechts, seit zwei Wochen. Therapie: Massage mit Dehnung."
+    );
+    assert("'nach' not abbreviated to n.",
+      r.note.includes("nach") && !/\bn\.\s/.test(r.note), "Got: " + r.note);
+    assert("'komplett' not abbreviated to kompl.",
+      r.note.includes("komplett") && !r.note.includes("kompl."), "Got: " + r.note);
+    assert("'Wochen' not abbreviated to Wo.",
+      r.note.includes("Wochen") && !r.note.includes("Wo."), "Got: " + r.note);
+    assert("'Beschwerden' not abbreviated to Beschw.",
+      r.note.includes("Beschwerden") && !r.note.includes("Beschw."), "Got: " + r.note);
+    assert("'mit' not abbreviated to m.",
+      r.note.includes("mit") && !/\bm\.\s/.test(r.note), "Got: " + r.note);
+  })();
+
+  // --- 4. No invented facts ---
+  (function () {
+    assert("Empty input returns empty note",
+      compressTranscript("").note === "", "Got: '" + compressTranscript("").note + "'");
+    assert("Empty input returns empty brief",
+      compressTranscript("").brief === "");
+
+    const partial = compressTranscript("Befund: Knie links. Therapie: Mobilisation.");
+    assert("Partial input: no Verlauf section when not stated",
+      !partial.note.includes("Verlauf:"), "Got: " + partial.note);
+    assert("Partial input: no Fokus section when not stated",
+      !partial.note.includes("Fokus:"), "Got: " + partial.note);
+  })();
+
+  // --- 5. Concise output (no verbose expansion) ---
+  (function () {
+    const r = compressTranscript(
+      "Befund: Dolor LWS links. Therapie: Vibro PPT, Chirotherapie."
+    );
+    assert("Note is concise (under 200 chars for simple input)",
+      r.note.length < 200, "Length: " + r.note.length + " | " + r.note);
+  })();
+
+  // --- 6. UNKLAR flagging for unrecognized therapy items ---
+  (function () {
+    const r = compressTranscript(
+      "Befund: Schmerzen. Therapie: Vibro PPT, Chiro Elves, Star Tregerband, FDM Jones."
+    );
+    assert("Chiro Elves flagged as UNKLAR",
+      r.unklarItems.includes("Chiro Elves"), "UNKLAR: " + JSON.stringify(r.unklarItems));
+    assert("Star Tregerband flagged as UNKLAR",
+      r.unklarItems.includes("Star Tregerband"), "UNKLAR: " + JSON.stringify(r.unklarItems));
+    assert("Vibro PPT NOT flagged as UNKLAR",
+      !r.unklarItems.includes("Vibro PPT"));
+    assert("FDM Jones NOT flagged as UNKLAR",
+      !r.unklarItems.includes("FDM Jones"));
+  })();
+
+  // --- 7. Next Session Brief derived only from input ---
+  (function () {
+    const r = compressTranscript(
+      "Befund: Knie links. Therapie: Massage."
+    );
+    assert("Brief has 'Aktuell:' derived from befund",
+      r.brief.includes("Aktuell:"), "Got: " + r.brief);
+    assert("Brief has 'Letzte Behandlung:' derived from therapie",
+      r.brief.includes("Letzte Behandlung:"), "Got: " + r.brief);
+    assert("Brief has no Verlauf when input has none",
+      !r.brief.includes("Verlauf:"), "Got: " + r.brief);
+    assert("Brief has no Fokus when input has none",
+      !r.brief.includes("Nächster Fokus:"), "Got: " + r.brief);
+  })();
+
+  // --- 8. Verlauf and Fokus when present (unlabeled input so keyword classifier fires) ---
+  (function () {
+    const r = compressTranscript(
+      "Schulter rechts. Seit letzter Woche deutlich besser. Ich habe gemacht Dehnung. Nächstes Mal weiter beobachten."
+    );
+    assert("Verlauf section present when stated",
+      r.note.includes("Verlauf:"), "Got: " + r.note);
+    assert("Fokus section present when stated",
+      r.note.includes("Fokus:"), "Got: " + r.note);
+  })();
+
+  // --- 9. Filler stripping ---
+  (function () {
+    const r = compressTranscript(
+      "Ich habe gemacht Vibro PPT, Neuralmassage, Schiebe."
+    );
+    assert("Filler 'Ich habe gemacht' stripped from therapy",
+      !r.note.includes("Ich habe gemacht"), "Got: " + r.note);
+    assert("Vibro PPT recognized after filler strip",
+      !r.unklarItems.includes("Vibro PPT"), "UNKLAR: " + JSON.stringify(r.unklarItems));
+  })();
+
+  // --- 10. Ground-truth reference cases ---
+  (function () {
+    const fall1 = compressTranscript(
+      "Befund: Dolor, Lendenwirbelsäule links. Nach Gartenarbeit, Ausstrahlung dorsal links bis Kniegelenk.\n" +
+      "Therapie: Vibro PPT, Neuralmassage, Chiro Elves mit Release, Schiebe, Gluträgerpunkte."
+    );
+    assert("Fall 1: Chiro Elves mit Release + Gluträgerpunkte are UNKLAR",
+      fall1.unklarItems.includes("Chiro Elves mit Release") && fall1.unklarItems.includes("Gluträgerpunkte"),
+      "UNKLAR: " + JSON.stringify(fall1.unklarItems));
+    assert("Fall 1: LWS abbreviation in note",
+      fall1.note.includes("LWS"), "Got: " + fall1.note);
+
+    const fall2 = compressTranscript(
+      "Kopfschmerzen, Halswirbelsäule linksseitig Zug dorsal Richtung Schulter. Seit einer Woche schlimmer.\n" +
+      "Therapie: Vibro PPT, CBRTOT, Star Tregerband, FDM Jones C1 links."
+    );
+    assert("Fall 2: CBRTOT + Star Tregerband are UNKLAR",
+      fall2.unklarItems.includes("CBRTOT") && fall2.unklarItems.includes("Star Tregerband"),
+      "UNKLAR: " + JSON.stringify(fall2.unklarItems));
+
+    const fall3 = compressTranscript(
+      "Kniegelenk links medial nach Gartenarbeit, akut seit zehn Tagen.\n" +
+      "Skriben, Kniegelenk, Quad Faszien, Fuß komplett, Tibiofibulargelenk Mobilisation. Lendenwirbelsäule L3/L4 Chiro."
+    );
+    assert("Fall 3: Skriben is UNKLAR",
+      fall3.unklarItems.includes("Skriben"),
+      "UNKLAR: " + JSON.stringify(fall3.unklarItems));
+  })();
+
+  // --- Summary ---
+  const total = passed + failed;
+  const cls = failed === 0 ? "ok" : "bad";
+  out.innerHTML += `<div class="summary ${cls}">${passed}/${total} passed` +
+    (failed > 0 ? `, ${failed} FAILED` : " — all green") + `</div>`;
+})();
+</script>
+</body>
+</html>

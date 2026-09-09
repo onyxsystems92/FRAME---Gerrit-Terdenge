@@ -1,12 +1,17 @@
 /*
- * DOM wiring for the live "Neue Nach-Diktierung" flow. No data leaves this
- * page except audio going to the browser's own speech engine while
- * recording (see recorder.js) — the transcript and outputs stay in memory
- * only and are cleared on "Neue Session" or page reload. Nothing here is
- * persisted to localStorage.
+ * DOM wiring for the live Session Note flow. No data leaves this page
+ * except audio going to the browser's own speech engine while recording
+ * (see recorder.js). Transcript and outputs stay in JS memory only and
+ * are cleared on "Neue Session" or page reload.
+ *
+ * The only localStorage use is the optional per-session validation
+ * feedback (Ja/Nein toggles) — transcript and note content are never
+ * persisted.
  */
 
 (function () {
+  const FEEDBACK_KEY = "frame-gerrit-pilot-feedback-v2";
+
   const els = {
     message: document.getElementById("pilot-message"),
     idle: document.getElementById("recorder-idle"),
@@ -16,7 +21,7 @@
     review: document.getElementById("transcript-review"),
     transcriptText: document.getElementById("transcript-text"),
     outputs: document.getElementById("outputs"),
-    kurznotiz: document.getElementById("output-kurznotiz"),
+    note: document.getElementById("output-note"),
     brief: document.getElementById("output-brief"),
     unklarBox: document.getElementById("unklar-box"),
     unklarList: document.getElementById("unklar-list"),
@@ -26,8 +31,12 @@
     btnCancel: document.getElementById("btn-cancel"),
     btnCompress: document.getElementById("btn-compress"),
     btnReset1: document.getElementById("btn-reset-1"),
-    btnReset2: document.getElementById("btn-reset-2")
+    btnReset2: document.getElementById("btn-reset-2"),
+    feedback: document.getElementById("pilot-feedback"),
+    feedbackSaved: document.getElementById("pilot-feedback-saved")
   };
+
+  let currentFeedback = {};
 
   function showMessage(text, kind) {
     els.message.textContent = text;
@@ -52,15 +61,33 @@
     });
   }
 
+  function clearFeedbackToggles() {
+    els.feedback.querySelectorAll(".toggle").forEach(b => b.classList.remove("active"));
+    els.feedbackSaved.textContent = "";
+    currentFeedback = {};
+  }
+
+  function savePilotFeedback() {
+    if (Object.keys(currentFeedback).length === 0) return;
+    try {
+      const all = JSON.parse(localStorage.getItem(FEEDBACK_KEY) || "[]");
+      const entry = Object.assign({ timestamp: new Date().toISOString() }, currentFeedback);
+      all.push(entry);
+      localStorage.setItem(FEEDBACK_KEY, JSON.stringify(all));
+    } catch (e) { /* localStorage unavailable — silent */ }
+  }
+
   function resetAll() {
+    savePilotFeedback();
     recorder.cancel();
     els.transcriptText.value = "";
-    els.kurznotiz.value = "";
+    els.note.value = "";
     els.brief.value = "";
     els.unklarList.innerHTML = "";
     els.unklarBox.hidden = true;
     els.timer.textContent = "00:00";
     els.interim.textContent = "";
+    clearFeedbackToggles();
     clearMessage();
     showOnly(els.idle);
   }
@@ -131,8 +158,8 @@
       return;
     }
     clearMessage();
-    const { kurznotiz, brief, unklarItems } = compressTranscript(text);
-    els.kurznotiz.value = kurznotiz;
+    const { note, brief, unklarItems } = compressTranscript(text);
+    els.note.value = note;
     els.brief.value = brief;
 
     if (unklarItems.length > 0) {
@@ -147,6 +174,7 @@
       els.unklarBox.hidden = true;
     }
 
+    clearFeedbackToggles();
     showOnly(els.outputs);
   });
 
@@ -169,6 +197,18 @@
       setTimeout(() => {
         btn.textContent = original;
       }, 1800);
+    });
+  });
+
+  els.feedback.querySelectorAll(".question").forEach(qEl => {
+    const key = qEl.dataset.key;
+    qEl.querySelectorAll(".toggle").forEach(btn => {
+      btn.addEventListener("click", () => {
+        qEl.querySelectorAll(".toggle").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentFeedback[key] = btn.dataset.value;
+        els.feedbackSaved.textContent = "Feedback gespeichert beim Schließen der Session.";
+      });
     });
   });
 

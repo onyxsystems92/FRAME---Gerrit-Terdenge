@@ -1,10 +1,14 @@
 /*
- * Deterministic, rule-based compression of a free dictation transcript into
- * a Lemmiscus-Kurznotiz and a Next Session Brief. No network call, no LLM —
- * everything here runs synchronously in the browser on the edited transcript
- * text only. Nothing is invented: fields are omitted when not mentioned, and
- * therapy items that don't match the known vocabulary are flagged UNKLAR
- * instead of being guessed or corrected.
+ * Deterministic, rule-based structuring of a free dictation transcript into
+ * a Session Note and a Next Session Brief. No network call, no LLM —
+ * everything runs synchronously in the browser on the edited transcript.
+ *
+ * Only standard professional abbreviations (HWS, BWS, LWS, WS) are applied.
+ * Personal shorthand is not forced — the output is concise but readable
+ * without practitioner-specific decoding.
+ *
+ * Therapy items not matching standard physiotherapy vocabulary are flagged
+ * as UNKLAR (likely transcription artifacts) rather than guessed.
  */
 
 const KNOWN_TECHNIQUE_PHRASES = [
@@ -49,9 +53,6 @@ const THERAPIE_TRIGGER_KEYWORDS = [
   "therapie war", "behandlung war", "dann noch"
 ];
 
-// Strips conversational lead-in ("Ich habe gemacht ...", "Behandelt wurde
-// mit ...") from a freeform therapy sentence before item-splitting, so the
-// filler words don't get swallowed into (and flag) the first technique item.
 const THERAPIE_FILLER_PREFIX_RE =
   /^(ich\s+habe\s+)?(dann\s+)?(noch\s+)?(gemacht|durchgeführt|angewendet|eingesetzt|behandelt\w*)(\s+wurde)?\s*(mit\s+|:)?\s*/i;
 
@@ -59,9 +60,6 @@ function stripTherapieFiller(sentence) {
   return sentence.replace(THERAPIE_FILLER_PREFIX_RE, "").trim();
 }
 
-// Strips a stray structural label (e.g. a lone "Befund:" without a paired
-// "Therapie:") from the start of a sentence so it never leaks into output
-// text when the labeled fast-path above doesn't apply.
 const STRAY_LABEL_RE =
   /^(Befund|Beschwerden|Therapie|Verlauf|Reaktion|Fokus|Nächstes Mal)\s*:?\s*/i;
 
@@ -76,18 +74,6 @@ const ABBREVIATIONS = [
   [/Wirbelsäule/gi, "WS"],
   [/Kniegelenk/gi, "Knie"],
   [/Schultergelenk/gi, "Schulter"],
-  [/\blinks\b/gi, "li."],
-  [/\brechts\b/gi, "re."],
-  [/\bnach\b/gi, "n."],
-  [/\bmit\b/gi, "m."],
-  [/\bbis\b/gi, "b."],
-  [/\bWochen\b/gi, "Wo."],
-  [/\bWoche\b/gi, "Wo."],
-  [/\bTage\b/gi, "Tg."],
-  [/\bTag\b/gi, "Tg."],
-  [/\bkomplett\b/gi, "kompl."],
-  [/\bBeschwerden\b/gi, "Beschw."],
-  [/\bSchmerzen\b/gi, "Schm."]
 ];
 
 function abbreviate(text) {
@@ -111,11 +97,6 @@ function splitLabel(text, labelPattern) {
   return { index: match.index, length: match[0].length };
 }
 
-/**
- * Splits a comma/"und"/semicolon-separated therapy item list, classifies
- * each item as recognized or UNKLAR based on KNOWN_WORDS, and returns both
- * lists plus the raw items for display.
- */
 function classifyTherapyItems(therapieText) {
   const items = therapieText
     .split(/,|;| und /i)
@@ -148,11 +129,6 @@ function classifyTherapyItems(therapieText) {
   return { recognized, unklar, items };
 }
 
-/**
- * Parses free dictation text into Befund/Therapie/Verlauf/Fokus segments.
- * Prefers explicit "Befund:"/"Therapie:" labels (Gerrit's own habit);
- * falls back to keyword-based sentence classification otherwise.
- */
 function parseTranscript(rawText) {
   const text = rawText.replace(/\s+/g, " ").trim();
 
@@ -233,25 +209,27 @@ function formatItemsForDisplay(recognized, unklar, items) {
 }
 
 /**
- * Main entry point: takes the edited transcript text and returns
- * { kurznotiz, brief, unklarItems }.
+ * Main entry point: takes the edited transcript and returns
+ * { note, brief, unklarItems }.
  */
 function compressTranscript(rawText) {
   const { befund, therapie, verlauf, fokus } = parseTranscript(rawText);
   const { recognized, unklar, items } = classifyTherapyItems(therapie);
   const therapieDisplay = formatItemsForDisplay(recognized, unklar, items);
 
-  const kurznotizLines = [];
-  if (befund) kurznotizLines.push(abbreviate(befund));
-  if (items.length > 0) kurznotizLines.push(`Th: ${abbreviate(therapieDisplay)}`);
-  const kurznotiz = kurznotizLines.join("\n");
+  const noteLines = [];
+  if (befund) noteLines.push(`Befund: ${abbreviate(befund)}`);
+  if (items.length > 0) noteLines.push(`Therapie: ${abbreviate(therapieDisplay)}`);
+  if (verlauf) noteLines.push(`Verlauf: ${abbreviate(verlauf)}`);
+  if (fokus) noteLines.push(`Fokus: ${abbreviate(fokus)}`);
+  const note = noteLines.join("\n");
 
   const briefLines = [];
-  if (befund) briefLines.push(`Beschwerden / aktueller Stand: ${befund}`);
-  if (items.length > 0) briefLines.push(`Letzte Intervention: ${therapieDisplay}`);
-  if (verlauf) briefLines.push(`Verlauf/Veränderung: ${verlauf}`);
-  if (fokus) briefLines.push(`Offener Fokus: ${fokus}`);
+  if (befund) briefLines.push(`Aktuell: ${abbreviate(befund)}`);
+  if (items.length > 0) briefLines.push(`Letzte Behandlung: ${abbreviate(therapieDisplay)}`);
+  if (verlauf) briefLines.push(`Verlauf: ${abbreviate(verlauf)}`);
+  if (fokus) briefLines.push(`Nächster Fokus: ${abbreviate(fokus)}`);
   const brief = briefLines.join("\n");
 
-  return { kurznotiz, brief, unklarItems: unklar };
+  return { note, brief, unklarItems: unklar };
 }
